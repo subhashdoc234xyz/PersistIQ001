@@ -1,0 +1,6 @@
+{
+  "name": "PersistIQ",
+  "description": "Durable AI Research Agent with Stateful Orchestration",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

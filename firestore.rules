@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Allow anyone to retrieve a single task by its ID (for Shared Roadmap Player)
+    match /tasks/{taskId} {
+      allow get: if true;
+      
+      // Protect listing: only the authenticated owner can query/list their own tasks
+      allow list: if request.auth != null && resource.data.ownerId == request.auth.uid;
+      
+      // Protect creation: only authenticated users can create, and must mark themselves as owner
+      allow create: if request.auth != null && request.resource.data.ownerId == request.auth.uid;
+      
+      // Protect modification: only the owner can update or delete
+      allow update, delete: if request.auth != null && resource.data.ownerId == request.auth.uid;
+    }
+  }
+}
