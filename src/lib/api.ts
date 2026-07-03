@@ -23,7 +23,20 @@ export interface ResearchTask {
 
 const getUserEmail = (): string => {
   if (auth.currentUser) {
-    return auth.currentUser.email || `guest_${auth.currentUser.uid}@persistiq.io`;
+    const user = auth.currentUser;
+    let email = user.email;
+    if (!email && user.providerData) {
+      for (const profile of user.providerData) {
+        if (profile.email) {
+          email = profile.email;
+          break;
+        }
+      }
+    }
+    if (!email && user.providerData.some(p => p.providerId === "github.com")) {
+      email = localStorage.getItem(`persistiq_github_email_${user.uid}`) || null;
+    }
+    return email || `guest_${user.uid}@persistiq.io`;
   }
   return "guest@persistiq.io";
 };

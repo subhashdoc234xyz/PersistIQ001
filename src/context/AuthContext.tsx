@@ -7,6 +7,7 @@ import {
   sendPasswordResetEmail,
   signInWithPopup,
   signInAnonymously,
+  GithubAuthProvider,
   User 
 } from "firebase/auth";
 import { auth, googleProvider, githubProvider } from "../lib/firebase";
@@ -42,7 +43,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       // Keep real authenticated user if present
       if (user) {
-        setCurrentUser(user);
+        let capturedEmail = user.email;
+        if (!capturedEmail && user.providerData) {
+          for (const profile of user.providerData) {
+            if (profile.email) {
+              capturedEmail = profile.email;
+              break;
+            }
+          }
+        }
+        if (!capturedEmail && user.providerData.some(p => p.providerId === 'github.com')) {
+          capturedEmail = localStorage.getItem(`persistiq_github_email_${user.uid}`) || undefined;
+        }
+        
+        setCurrentUser({
+          ...user,
+          email: capturedEmail || user.email
+        });
       } else {
         // Only clear if not in custom mock guest session
         setCurrentUser((prev: any) => {
@@ -59,11 +76,62 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const loginWithGoogle = async () => {
-    await signInWithPopup(auth, googleProvider);
+    const result = await signInWithPopup(auth, googleProvider);
+    let capturedEmail = result.user.email;
+    if (!capturedEmail && result.user.providerData) {
+      for (const profile of result.user.providerData) {
+        if (profile.email) {
+          capturedEmail = profile.email;
+          break;
+        }
+      }
+    }
+    console.log("Google Login raw user.email:", result.user.email);
+    console.log("Google Login capturedEmail:", capturedEmail);
   };
 
   const loginWithGithub = async () => {
-    await signInWithPopup(auth, githubProvider);
+    const result = await signInWithPopup(auth, githubProvider);
+    let capturedEmail = result.user.email;
+    
+    // Capturing email from providerData fallback
+    if (!capturedEmail && result.user.providerData) {
+      for (const profile of result.user.providerData) {
+        if (profile.email) {
+          capturedEmail = profile.email;
+          break;
+        }
+      }
+    }
+
+    // Fetch directly from GitHub API if still null
+    const credential = GithubAuthProvider.credentialFromResult(result);
+    const accessToken = credential?.accessToken;
+    if (!capturedEmail && accessToken) {
+      try {
+        const res = await fetch("https://api.github.com/user/emails", {
+          headers: { Authorization: `token ${accessToken}` },
+        });
+        if (res.ok) {
+          const emails = await res.json();
+          const emailObj = Array.isArray(emails) ? emails.find(e => e.primary && e.verified) : null;
+          if (emailObj) {
+            capturedEmail = emailObj.email;
+            localStorage.setItem(`persistiq_github_email_${result.user.uid}`, capturedEmail);
+          } else {
+            console.error("No verified primary email in GitHub response:", emails);
+          }
+        } else {
+          console.error("GitHub /user/emails failed:", res.status);
+        }
+      } catch (err) {
+        console.error("Failed to fetch email from GitHub:", err);
+      }
+    }
+
+    console.log("GitHub Login raw user.email:", result.user.email);
+    console.log("GitHub Login providerData:", result.user.providerData);
+    console.log("GitHub Login capturedEmail:", capturedEmail);
   };
 
   const loginAsGuest = async () => {
