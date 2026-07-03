@@ -198,6 +198,6 @@ export async function sendTaskEmail(
     return true;
   } catch (err: any) {
     console.error(`[Mailer] Failed to send task email for task ${task.id} to ${recipientEmail}:`, err);
-    return false;
+    throw err;
   }
 }
