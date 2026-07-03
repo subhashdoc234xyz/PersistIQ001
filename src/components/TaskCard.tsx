@@ -367,13 +367,9 @@ export default function TaskCard({ task, onRefresh, id }: TaskCardProps) {
   const [editingNotesIndex, setEditingNotesIndex] = useState<number | null>(null);
   const [tempNoteText, setTempNoteText] = useState("");
 
-  // Email Sharing states
-  const [showEmailModal, setShowEmailModal] = useState(false);
+  // Auto email status state
   const [recipientEmail, setRecipientEmail] = useState("");
-  const [customEmailMessage, setCustomEmailMessage] = useState("");
-  const [emailSending, setEmailSending] = useState(false);
-  const [emailSuccess, setEmailSuccess] = useState(false);
-  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailStatus, setEmailStatus] = useState<{ success: boolean; message: string } | null>(null);
 
   React.useEffect(() => {
     if (currentUser?.email && !recipientEmail) {
@@ -381,47 +377,62 @@ export default function TaskCard({ task, onRefresh, id }: TaskCardProps) {
     }
   }, [currentUser, recipientEmail]);
 
-  const handleSendEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setEmailSending(true);
-    setEmailError(null);
-    setEmailSuccess(false);
+  React.useEffect(() => {
+    if (emailStatus) {
+      const timer = setTimeout(() => setEmailStatus(null), 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [emailStatus]);
 
-    // Capture user's real email with robust fallbacks
-    let targetEmail = recipientEmail || currentUser?.email;
-    if (!targetEmail && currentUser?.providerData) {
-      for (const profile of currentUser.providerData) {
-        if (profile.email) {
-          targetEmail = profile.email;
-          break;
+  // Automatic email dispatch on task completion or failure
+  React.useEffect(() => {
+    if (task.status === "completed" || task.status === "failed") {
+      const storageKey = `persistiq_emailed_task_${task.id}`;
+      if (!localStorage.getItem(storageKey)) {
+        // Mark as sent immediately to avoid race conditions/multiple requests
+        localStorage.setItem(storageKey, "sent");
+
+        let targetEmail = recipientEmail || currentUser?.email;
+        if (!targetEmail && currentUser?.providerData) {
+          for (const profile of currentUser.providerData) {
+            if (profile.email) {
+              targetEmail = profile.email;
+              break;
+            }
+          }
         }
+
+        if (!targetEmail || !targetEmail.includes("@") || targetEmail.includes("guest@persistiq.io")) {
+          setEmailStatus({
+            success: false,
+            message: "Auto-send email skipped: No valid, non-guest recipient email address."
+          });
+          return;
+        }
+
+        tasksApi.shareEmail(task.id, targetEmail, `[Auto-Notification] Your research task has ended with status: ${task.status}.`)
+          .then((res) => {
+            if (res.success) {
+              setEmailStatus({
+                success: true,
+                message: `Study guide auto-emailed successfully to ${targetEmail} 🚀`
+              });
+            } else {
+              setEmailStatus({
+                success: false,
+                message: "Auto-email failed: SMTP configuration is not verified."
+              });
+            }
+          })
+          .catch((err) => {
+            setEmailStatus({
+              success: false,
+              message: `Auto-email failed: ${err.message || err}`
+            });
+          });
       }
     }
-
-    if (!targetEmail || !targetEmail.includes("@") || targetEmail.includes("guest@persistiq.io")) {
-      setEmailError("Please provide a valid, real recipient email address.");
-      setEmailSending(false);
-      return;
-    }
-
-    try {
-      const res = await tasksApi.shareEmail(task.id, targetEmail, customEmailMessage);
-      if (res.success) {
-        setEmailSuccess(true);
-        setCustomEmailMessage("");
-        setTimeout(() => {
-          setShowEmailModal(false);
-          setEmailSuccess(false);
-        }, 3000);
-      } else {
-        setEmailError("Failed to email. Please configure GMAIL_USER and GMAIL_APP_PASSWORD.");
-      }
-    } catch (err: any) {
-      setEmailError(err.message || "Failed to send email. Check SMTP settings.");
-    } finally {
-      setEmailSending(false);
-    }
-  };
+  }, [task.status, task.id, currentUser, recipientEmail]);
 
   React.useEffect(() => {
     if (error) {
@@ -1115,6 +1126,27 @@ export default function TaskCard({ task, onRefresh, id }: TaskCardProps) {
         </div>
       )}
 
+      {/* Auto-send Email Notification Popup */}
+      {emailStatus && (
+        <div className={`mt-2 text-xs border px-3 py-2 rounded-xl flex items-center justify-between animate-fade-in shadow-xs ${
+          emailStatus.success 
+            ? "bg-emerald-50 border-emerald-200 text-emerald-700" 
+            : "bg-red-50 border-red-250 text-red-750"
+        }`}>
+          <span className="font-medium">{emailStatus.message}</span>
+          <button 
+            onClick={() => setEmailStatus(null)} 
+            className={`transition-colors cursor-pointer text-xs ml-2 flex items-center justify-center w-4 h-4 rounded-full ${
+              emailStatus.success 
+                ? "text-emerald-400 hover:text-emerald-600 hover:bg-emerald-100" 
+                : "text-red-450 hover:text-red-600 hover:bg-red-100"
+            }`}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex items-center justify-between mt-3">
         <div className="flex items-center gap-2">
@@ -1219,19 +1251,7 @@ export default function TaskCard({ task, onRefresh, id }: TaskCardProps) {
                 {shareCopied ? <Check size={13} /> : <Share2 size={13} />}
                 {shareCopied ? "Copied!" : "Share Link"}
               </button>
-              
-              <button
-                onClick={() => setShowEmailModal(!showEmailModal)}
-                className={`flex items-center gap-1.5 text-xs transition-all duration-150 cursor-pointer font-medium px-2 py-1 rounded-md ${
-                  showEmailModal
-                    ? "bg-indigo-50 text-indigo-600 border border-indigo-200 font-bold"
-                    : "text-slate-500 hover:text-indigo-600"
-                }`}
-                title="Email this syllabus, guide and study roadmap link"
-              >
-                <Mail size={13} />
-                Email Guide
-              </button>
+
             </>
           )}
 
@@ -1249,91 +1269,7 @@ export default function TaskCard({ task, onRefresh, id }: TaskCardProps) {
         </div>
       </div>
 
-      {/* Share / Notification Email Form Dialog */}
-      {showEmailModal && (
-        <div className="mt-4 p-4 rounded-xl bg-slate-50 border border-slate-200/60 animate-fade-in shadow-xs">
-          <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-2">
-            <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-              <Mail size={13} className="text-indigo-500" /> Share via Email Notification
-            </h4>
-            <button 
-              onClick={() => setShowEmailModal(false)}
-              className="text-slate-400 hover:text-slate-600 transition-colors text-xs font-bold cursor-pointer"
-            >
-              ✕
-            </button>
-          </div>
 
-          {emailError && (
-            <div className="mb-3 text-[11px] bg-red-50 border border-red-150 text-red-600 px-3 py-1.5 rounded-lg font-medium">
-              {emailError}
-            </div>
-          )}
-
-          {emailSuccess ? (
-            <div className="text-center py-4 bg-emerald-50 border border-emerald-150 rounded-xl text-emerald-600 animate-pulse">
-              <p className="text-xs font-bold">🚀 Succeeded! Study guide sent to:</p>
-              <p className="text-[11px] font-mono mt-1 text-emerald-700">{recipientEmail || currentUser?.email}</p>
-            </div>
-          ) : (
-            <form onSubmit={handleSendEmail} className="space-y-3">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                  Recipient Email
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={recipientEmail}
-                  onChange={(e) => setRecipientEmail(e.target.value)}
-                  placeholder="e.g. name@example.com"
-                  className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                />
-                {!currentUser || currentUser.uid === "guest-user-session" ? (
-                  <p className="text-[9px] text-slate-400 mt-0.5">Note: Since you are signed in as Guest, please specify a real recipient email address.</p>
-                ) : null}
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                  Personal Message (Optional)
-                </label>
-                <textarea
-                  value={customEmailMessage}
-                  onChange={(e) => setCustomEmailMessage(e.target.value)}
-                  placeholder="Add a friendly note to include in the email..."
-                  rows={2}
-                  className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none resize-none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  disabled={emailSending}
-                  onClick={() => setShowEmailModal(false)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-200 hover:bg-slate-300 text-slate-600 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={emailSending}
-                  className="px-4 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  {emailSending ? (
-                    <>
-                      <RefreshCw size={11} className="animate-spin" /> Sending...
-                    </>
-                  ) : (
-                    <>Email Now 🚀</>
-                  )}
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-      )}
 
       {/* Expanded details */}
       {expanded && (
