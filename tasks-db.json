@@ -1,1 +1,23 @@
-[]
+[
+  {
+    "id": 1,
+    "user_email": "subhashxyz7720@gmail.com",
+    "topic": "java programming",
+    "status": "failed",
+    "current_step": "search_failed",
+    "search_results": null,
+    "extracted_data": null,
+    "final_summary": null,
+    "error_message": "Search step failed: GEMINI_API_KEY environment variable is not set. Please supply it in Settings > Secrets.",
+    "retry_count": 10,
+    "created_at": "2026-07-03T03:38:23.146Z",
+    "updated_at": "2026-07-03T03:38:54.922Z",
+    "sources": null,
+    "phase_states": "{}",
+    "study_notes": "{}",
+    "duration": "1_week",
+    "focus": "practical",
+    "task_type": "learning",
+    "num_pages": null
+  }
+]
