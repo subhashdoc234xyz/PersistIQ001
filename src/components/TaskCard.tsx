@@ -1437,16 +1437,18 @@ export default function TaskCard({ task, onRefresh, id }: TaskCardProps) {
                                   <pre className="whitespace-pre overflow-x-auto" {...props} />
                                 </div>
                               ),
-                              code: ({node, inline, ...props}: any) => {
+                              code: ({node, className, children, ...props}: any) => {
+                                const match = /language-(\w+)/.exec(className || "");
+                                const inline = !match;
                                 return inline ? (
-                                  <code className="bg-slate-100 text-indigo-600 px-1.5 py-0.5 rounded font-mono text-[11px] font-semibold" {...props} />
+                                  <code className="bg-slate-100 text-indigo-600 px-1.5 py-0.5 rounded font-mono text-[11px] font-semibold" {...props}>{children}</code>
                                 ) : (
-                                  <code className="block whitespace-pre font-mono" {...props} />
+                                  <code className="block whitespace-pre font-mono" {...props}>{children}</code>
                                 );
                               }
                             }}
                           >
-                            {description}
+                            {description.replace(/\\n/g, "\n")}
                           </ReactMarkdown>
                         </div>
 
@@ -1609,16 +1611,18 @@ export default function TaskCard({ task, onRefresh, id }: TaskCardProps) {
                           <pre className="whitespace-pre overflow-x-auto" {...props} />
                         </div>
                       ),
-                      code: ({node, inline, ...props}: any) => {
+                      code: ({node, className, children, ...props}: any) => {
+                        const match = /language-(\w+)/.exec(className || "");
+                        const inline = !match;
                         return inline ? (
-                          <code className="bg-slate-100 text-indigo-600 px-1.5 py-0.5 rounded font-mono text-[11px] font-semibold" {...props} />
+                          <code className="bg-slate-100 text-indigo-600 px-1.5 py-0.5 rounded font-mono text-[11px] font-semibold" {...props}>{children}</code>
                         ) : (
-                          <code className="block whitespace-pre font-mono" {...props} />
+                          <code className="block whitespace-pre font-mono" {...props}>{children}</code>
                         );
                       }
                     }}
                   >
-                    {task.final_summary}
+                    {task.final_summary?.replace(/\\n/g, "\n")}
                   </ReactMarkdown>
                 </div>
               </div>
